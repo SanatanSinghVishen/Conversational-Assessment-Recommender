@@ -19,8 +19,9 @@ def _load_model():
         os.environ["MKL_NUM_THREADS"] = "1"
         import torch
         torch.set_num_threads(1)
+        torch.set_grad_enabled(False)
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(MODEL_NAME)
+        _model = SentenceTransformer(MODEL_NAME, device="cpu")
     return _model
 
 def build_index(catalog: list[dict]):
