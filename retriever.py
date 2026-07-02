@@ -17,6 +17,8 @@ def _load_model():
         import os
         os.environ["OMP_NUM_THREADS"] = "1"
         os.environ["MKL_NUM_THREADS"] = "1"
+        import torch
+        torch.set_num_threads(1)
         from sentence_transformers import SentenceTransformer
         _model = SentenceTransformer(MODEL_NAME)
     return _model

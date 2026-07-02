@@ -1,3 +1,8 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel, field_validator
