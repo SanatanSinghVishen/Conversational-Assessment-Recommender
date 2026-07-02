@@ -1,3 +1,13 @@
+---
+title: SHL Recommender
+emoji: 🚀
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # SHL Conversational Assessment Recommender
 
 ## 1. Architecture Overview
