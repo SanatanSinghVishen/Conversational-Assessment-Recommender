@@ -13,7 +13,7 @@ client = AsyncOpenAI(
 async def call_llm(messages: list[dict]) -> str:
     try:
         response = await client.chat.completions.create(
-            model="google/gemini-1.5-flash",
+            model="google/gemini-2.5-flash",
             messages=messages,
             temperature=0.1,
             max_tokens=512,

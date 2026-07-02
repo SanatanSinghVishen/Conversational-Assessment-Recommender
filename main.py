@@ -11,10 +11,15 @@ from agent import process_chat
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load/build everything once at startup
+    print("Loading catalog...")
     catalog = load_catalog("catalog.json")   # load items from JSON
     if not os.path.exists("faiss_index.bin"):
+        print("Building FAISS index (this may take 15-30 seconds)...")
         build_index(catalog)
+        print("FAISS index built.")
+    print("Loading index...")
     load_index()
+    print("Ready!")
     yield
     # cleanup here if needed
 
@@ -26,7 +31,7 @@ class Message(BaseModel):
 
     @field_validator("role")
     @classmethod
-    def role_must_be_valid(cls, v):
+    def role_must_be_valid(cls, v: str) -> str:
         if v not in ("user", "assistant"):
             raise ValueError("role must be user or assistant")
         return v
@@ -36,7 +41,7 @@ class ChatRequest(BaseModel):
 
     @field_validator("messages")
     @classmethod
-    def messages_not_empty(cls, v):
+    def messages_not_empty(cls, v: list[Message]) -> list[Message]:
         if not v:
             raise ValueError("messages cannot be empty")
         return v

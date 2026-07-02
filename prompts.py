@@ -36,10 +36,11 @@ official SHL catalog.
 {{
   "intent": "clarify" | "recommend" | "refine" | "compare" | "refuse",
   "reply": "<your natural language response to the user>",
-  "retrieval_query": "<a dense search query to retrieve relevant assessments, populated only for recommend/refine/compare>",
+  "recommended_urls": ["<url of recommended item 1>", "<url of recommended item 2>"],
   "end_of_conversation": false
 }}
-- For clarify/refuse: retrieval_query should be an empty string "".
+- For clarify/refuse: recommended_urls should be an empty list [].
+- For recommend/refine: select the most appropriate URLs from the Catalog Data provided above.
 - reply must always be friendly, professional, and concise (2-4 sentences max).
 - end_of_conversation is true ONLY when you have provided a shortlist and there 
   is no pending user question.
@@ -66,14 +67,19 @@ def format_catalog_context(retrieved_items: list[dict]) -> str:
         return "No items retrieved yet. Ask for more context."
     lines = []
     for item in retrieved_items:
+        languages = ", ".join(item.get('languages', [])) if item.get('languages') else "English"
+        keys = ", ".join(item.get('keys', [])) if item.get('keys') else "N/A"
+        levels = ", ".join(item.get('job_levels', [])) if item.get('job_levels') else "N/A"
         lines.append(f"""
 ---
 Name: {item.get('name', 'N/A')}
-URL: {item.get('url', 'N/A')}
-Type: {item.get('test_type', 'N/A')}
+URL: {item.get('link', 'N/A')}
+Type/Keys: {keys}
+Duration: {item.get('duration', 'N/A')}
+Languages: {languages}
 Description: {item.get('description', 'N/A')}
-Job Levels: {', '.join(item.get('job_levels', []))}
-Remote Testing: {item.get('remote_testing', 'N/A')}
+Job Levels: {levels}
+Remote: {item.get('remote', 'N/A')}
 """.strip())
     return "\n\n".join(lines)
 
@@ -92,9 +98,8 @@ def build_retrieval_query(messages: list[dict]) -> str:
     for m in messages:
         if m["role"] == "user":
             context_parts.append(m["content"])
-    # take the last 3 user messages to capture refinements without
-    # drowning the query in early vague context
-    query = " ".join(context_parts[-3:])
+    # Take all user messages to capture full context (languages, industries, roles)
+    query = " ".join(context_parts)
     return query[:512]  # cap length for embedding model
 
 def build_compare_prompt(retrieved_items: list[dict], messages: list[dict]) -> str:
@@ -110,7 +115,7 @@ Use ONLY the following catalog data to answer their question. Do not use outside
 {{
   "intent": "compare",
   "reply": "<your factual comparison of the items>",
-  "retrieval_query": "",
+  "recommended_urls": [],
   "end_of_conversation": false
 }}
 """

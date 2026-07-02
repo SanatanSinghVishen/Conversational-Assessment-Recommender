@@ -1,7 +1,7 @@
 # SHL Conversational Assessment Recommender
 
 ## 1. Architecture Overview
-The system uses a 4-mode state machine implemented in FastAPI, backed by a `google/gemini-1.5-flash` LLM via OpenRouter. The catalog data is stored locally in JSON and indexed using a FAISS CPU index. The architecture retrieves relevant product items to inject into LLM prompts for grounded responses without hallucinations.
+The system uses a 4-mode state machine implemented in FastAPI, backed by a `google/gemini-2.5-flash` LLM via OpenRouter. The catalog data is stored locally in JSON and indexed using a FAISS CPU index. The architecture retrieves relevant product items to inject into LLM prompts for grounded responses without hallucinations.
 
 ## 2. Retrieval Setup
 The system uses the `all-MiniLM-L6-v2` Sentence-Transformers model to create 384-dimensional dense embeddings for each assessment. Retrieval leverages a flat inner-product (cosine similarity) index `IndexFlatIP` from FAISS, configured for top 15 results. Search texts are enriched with name, description, test type, and job levels.

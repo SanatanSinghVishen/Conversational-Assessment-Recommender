@@ -1,7 +1,7 @@
 import json
 import re
-from retriever import retrieve
-from prompts import build_system_prompt, format_catalog_context, build_retrieval_query, build_llm_messages, build_compare_prompt
+from retriever import retrieve, multi_retrieve
+from prompts import build_system_prompt, build_retrieval_query, build_llm_messages, build_compare_prompt, format_catalog_context
 from llm import call_llm
 
 OUT_OF_SCOPE_PATTERNS = [
@@ -66,46 +66,48 @@ async def process_chat(messages: list[dict]) -> dict:
     turn_cap_reached = len(messages) >= 7
     force_recommend = should_force_recommend(messages)
 
-    phase1_prompt = build_system_prompt(
-        catalog_context="", 
+    # 1. Always do retrieval first to ground the LLM
+    # Use multi_retrieve for broad coverage across diverse topics
+    retrieved_items = multi_retrieve(messages, top_k=20)
+    catalog_context_str = format_catalog_context(retrieved_items)
+
+    # 2. Make the single LLM call with the catalog context injected
+    prompt = build_system_prompt(
+        catalog_context=catalog_context_str, 
         force_recommend=force_recommend,
         turn_cap_reached=turn_cap_reached
     )
     
-    phase1_response = await call_llm(build_llm_messages(phase1_prompt, messages))
-    parsed = parse_llm_json(phase1_response)
+    response = await call_llm(build_llm_messages(prompt, messages))
+    parsed = parse_llm_json(response)
 
     intent = parsed.get("intent", "clarify")
-    retrieval_query = parsed.get("retrieval_query", "")
+    reply = parsed.get("reply", "")
+    end_conv = parsed.get("end_of_conversation", False)
+    recommended_urls = parsed.get("recommended_urls", [])
     
     # If forced recommend, we need to ensure intent is recommend
     if turn_cap_reached and intent != "recommend":
         intent = "recommend"
-        retrieval_query = build_retrieval_query(messages)
+        end_conv = True
 
-    retrieved_items = []
-    if intent in ("recommend", "refine", "compare") and retrieval_query:
-        retrieved_items = retrieve(retrieval_query, top_k=15)
-    elif intent in ("recommend", "refine") and not retrieval_query:
-        retrieval_query = build_retrieval_query(messages)
-        retrieved_items = retrieve(retrieval_query, top_k=15)
-
-    if intent == "compare" and retrieved_items:
-        compare_prompt = build_compare_prompt(retrieved_items, messages)
-        compare_response = await call_llm(build_llm_messages(compare_prompt, messages))
-        compare_parsed = parse_llm_json(compare_response)
-        reply = compare_parsed.get("reply", parsed.get("reply", ""))
-        end_conv = compare_parsed.get("end_of_conversation", False)
-        recommendations = []
-    else:
-        reply = parsed.get("reply", "")
-        end_conv = parsed.get("end_of_conversation", False)
-        recommendations = retrieved_items[:10] if intent in ("recommend", "refine") else []
+    recommendations = []
+    if intent in ("recommend", "refine"):
+        # Map URLs back to catalog objects
+        for url in recommended_urls:
+            item = next((i for i in retrieved_items if i.get("link") == url), None)
+            if item:
+                recommendations.append(item)
+        
+        # Fallback if LLM didn't format URLs exactly or omitted them: 
+        # Just use the top 5 if the LLM completely failed to provide them but intended to recommend
+        if not recommendations and retrieved_items:
+            recommendations = retrieved_items[:5]
 
     return {
         "reply": reply,
         "recommendations": [
-            {"name": r.get("name", "N/A"), "url": r.get("url", ""), "test_type": r.get("test_type", "N/A")}
+            {"name": r.get("name", "N/A"), "url": r.get("link", ""), "test_type": ", ".join(r.get("keys", [])) if r.get("keys") else "N/A"}
             for r in recommendations
         ],
         "end_of_conversation": bool(end_conv) or turn_cap_reached
