@@ -136,6 +136,25 @@ def multi_retrieve(messages: list[dict], top_k: int = 25) -> list[dict]:
         if len(frag) > 3 and len(frag) < 100:  # skip noise
             _add_results(retrieve(frag, top_k=5))
     
+    # Query 4: Lexical keyword matching (Hybrid search)
+    # Dense retrieval is bad at exact keyword matches (e.g. "SQL", "Spring").
+    # We strip common suffixes from the catalog names and look for direct substring
+    # hits in the user's raw text.
+    all_text_lower = all_text.lower()
+    for item in _meta:
+        raw_name = item.get("name", "")
+        # Clean the name: remove "(New)", "(General)", "- US", "v1", etc.
+        # This regex removes anything in parentheses or trailing hyphens/versions.
+        clean_name = re.sub(r'\(.*?\)', '', raw_name)
+        clean_name = re.sub(r'[-–—]\s*(US|UK|Next Generation|Essentials|R1|v\d+)', '', clean_name, flags=re.IGNORECASE)
+        clean_name = clean_name.strip().lower()
+        
+        # If the cleaned name is substantial (e.g. not just "the") and exists in user text
+        if len(clean_name) > 2 and clean_name in all_text_lower:
+            m = dict(item)
+            m["_score"] = 0.95  # give it a very high score because it's an exact match
+            _add_results([m])
+            
     # Sort topic-specific results by score descending
     topic_results = sorted(seen.values(), key=lambda x: x["_score"], reverse=True)
     
