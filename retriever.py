@@ -2,7 +2,6 @@ import faiss
 import json
 import re
 
-from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 INDEX_PATH = "faiss_index.bin"
@@ -15,6 +14,10 @@ _meta  = None  # list of catalog items, positionally aligned with the FAISS inde
 def _load_model():
     global _model
     if _model is None:
+        import os
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
+        from sentence_transformers import SentenceTransformer
         _model = SentenceTransformer(MODEL_NAME)
     return _model
 
