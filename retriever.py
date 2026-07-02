@@ -1,0 +1,68 @@
+import faiss
+import json
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+MODEL_NAME = "all-MiniLM-L6-v2"
+INDEX_PATH = "faiss_index.bin"
+META_PATH  = "embeddings_meta.json"
+
+_model = None
+_index = None
+_meta  = None  # list of catalog items, positionally aligned with the FAISS index
+
+def _load_model():
+    global _model
+    if _model is None:
+        _model = SentenceTransformer(MODEL_NAME)
+    return _model
+
+def build_index(catalog: list[dict]):
+    if not catalog:
+        print("Catalog is empty. Skipping index build.")
+        return
+    model = _load_model()
+    # Build search text for each item
+    for item in catalog:
+        item["search_text"] = f"""
+{item.get('name', '')}
+{item.get('description', '')}
+Test type: {item.get('test_type', '')}
+Job levels: {', '.join(item.get('job_levels', []))}
+Duration: {item.get('duration', 'N/A')} minutes
+""".strip()
+    texts = [item["search_text"] for item in catalog]
+    embeddings = model.encode(texts, normalize_embeddings=True,
+                              show_progress_bar=True, batch_size=64)
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatIP(dim)       # cosine sim via inner product on L2-normalized vectors
+    index.add(embeddings.astype("float32"))
+    faiss.write_index(index, INDEX_PATH)
+    with open(META_PATH, "w", encoding="utf-8") as f:
+        json.dump(catalog, f)
+    print(f"Built index with {index.ntotal} vectors, dim={dim}")
+
+def load_index():
+    global _index, _meta
+    try:
+        _index = faiss.read_index(INDEX_PATH)
+        with open(META_PATH, encoding="utf-8") as f:
+            _meta = json.load(f)
+    except Exception as e:
+        print(f"Error loading index: {e}")
+
+def retrieve(query: str, top_k: int = 15) -> list[dict]:
+    """Return top_k catalog items most semantically similar to query."""
+    if _index is None or _meta is None:
+        return []
+    model = _load_model()
+    q_vec = model.encode([query], normalize_embeddings=True).astype("float32")
+    scores, indices = _index.search(q_vec, top_k)
+    results = []
+    for score, idx in zip(scores[0], indices[0]):
+        if idx == -1:
+            continue
+        item = dict(_meta[idx])
+        item["_score"] = float(score)
+        results.append(item)
+    return results
